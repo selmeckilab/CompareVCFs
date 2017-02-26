@@ -58,7 +58,7 @@ class Genes(object):
 
 
 class Child(object):
-    def __init__(self, name, al, gt, gt_data):
+    def __init__(self, name, al, gt, gt_data, filter):
         """
 
         :param name:
@@ -70,6 +70,7 @@ class Child(object):
         self.al = al
         self.gt = gt
         self.gt_data = gt_data
+        self.filter = filter
         self.mutation = None
     @property
     def effect(self):
@@ -142,10 +143,10 @@ class Row(object):
         return mut
 
     def compare_null_child(self):
-        '''
+        """
         compares the child if the child is homozygeous to the reference but the parent is not
         :return: str: hom or loh
-        '''
+        """
         mut = ""
         if self.parent.gt > 1:
             mut = "hom"
@@ -154,7 +155,7 @@ class Row(object):
         return mut
 
     @staticmethod
-    def compare_null_parent(self, child):
+    def compare_null_parent(child):
         """
         compares the child if the parent is homozygeous to the reference but the child is not
         :param child:
@@ -173,13 +174,13 @@ class Row(object):
         :return:
         """
         for child in self.children:
-
-            if self.parent and child:
-                child.mutation = self.compare_no_null(child)
-            if self.parent and not child:
-                child.mutation = self.compare_null_child()
-            if not self.parent and child:
-                child.mutation = self.compare_null_parent(child)
+            if not child.filter:
+                if self.parent and child:
+                    child.mutation = self.compare_no_null(child)
+                if self.parent and not child:
+                    child.mutation = self.compare_null_child()
+                if not self.parent and child:
+                    child.mutation = self.compare_null_parent(child)
 
 
 class MultiSampleRow(Row):
@@ -213,14 +214,13 @@ class MultiFileRow(Row):
         Row.__init__(self)
 
         if recs[self.parent_index]:
-            print "here"
             parent_rec = recs[self.parent_index]
             name = self.extract_name(self.file_names[self.parent_index])
             al = parent_rec.samples[0].gt_bases[-1]
             gt = parent_rec.samples[0].gt_type
             gt_data = parent_rec.samples[0].data
 
-            self.parent = Child(name,al,gt,gt_data)
+            self.parent = Child(name, al, gt, gt_data, None)
             self.ref = parent_rec.REF
             self.pos = int(parent_rec.POS)
             self.chrom = parent_rec.CHROM
@@ -237,27 +237,19 @@ class MultiFileRow(Row):
         :return:
         """
 
-        '''
-        compare parents and chidlren while creating the children.
-        
-        '''
         for idx, rec in enumerate(recs):
             if idx != self.parent_index:
                 name = self.extract_name(self.file_names[idx])
-                if rec and not rec.FILTER:
+                if rec:
                     al = rec.samples[0].gt_bases[-1]
                     gt = rec.samples[0].gt_type
                     gt_data = rec.samples[0].data
-
+                    filt = rec.FILTER
                     if not (self.pos and self.chrom):
                         self.pos = int(rec.POS)
                         self.chrom = rec.CHROM
                         self.ref = rec.REF
-                else:
-                    al = self.ref
-                    gt = 0
-                    gt_data = self.parent.gt_data
-                self.children.append(Child(name, al, gt, gt_data))
+                    self.children.append(Child(name, al, gt, gt_data,filt))
 
 
 class VCFWriter:
