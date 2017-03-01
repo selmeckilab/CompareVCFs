@@ -4,7 +4,6 @@ import argparse
 import csv
 import re
 from intervaltree import IntervalTree
-from fuzzywuzzy import process
 from abc import ABCMeta, abstractmethod
 
 
@@ -71,6 +70,18 @@ class Child(object):
         self.gt = gt
         self.gt_data = gt_data
         self.mutation = None
+
+    @property
+    def formatted_gt(self):
+        formatted_gt = ""
+        if self.gt == 0:
+            formatted_gt = "0/0"
+        if self.gt == 1:
+            formatted_gt = "0/1"
+        else:
+            formatted_gt = "1/1"
+        return formatted_gt
+
     @property
     def effect(self):
         #TODO
@@ -91,12 +102,12 @@ class Row(object):
     file_names = []
     parent_name = None
 
-    def __init__(self):
+    def __init__(self, chrom, pos, parent, children):
 
-        self.parent = self.extract_name(self.file_names[0])
-        self.chrom = None
-        self.pos = None
-        self.children = []
+        self.chrom = chrom
+        self.pos = pos
+        self.parent = parent
+        self.children = children
         self.compare_children()
 
     @staticmethod
@@ -122,142 +133,20 @@ class Row(object):
             gene = feature.pop()[2]
         return gene
 
-    def compare_no_null(self, child):
-        """
-        compares the child if both the child and parent vary from the reference
-        :param child:
-        :return: str: hom, het or loh
-        """
-        mut = ""
-        if self.parent.gt > 1:
-            if child.gt > 1:
-                mut = "hom"
-            else:
-                mut = "het"
-        if self.parent.gt == 1:
-            if child.gt > 1:
-                mut = "het"
-            else:
-                mut = "loh"
-        return mut
-
-    def compare_null_child(self):
-        '''
-        compares the child if the child is homozygeous to the reference but the parent is not
-        :return: str: hom or loh
-        '''
-        mut = ""
-        if self.parent.gt > 1:
-            mut = "hom"
-        else:
-            mut = "loh"
-        return mut
-
-    @staticmethod
-    def compare_null_parent(self, child):
-        """
-        compares the child if the parent is homozygeous to the reference but the child is not
-        :param child:
-        :return: str: hom or het
-        """
-        mut = ""
-        if child.gt > 1:
-            mut = "hom"
-        else:
-            mut = "het"
-        return mut
-
     def compare_children(self):
         """
         determines the each child's mutation type and adds it to the child instance
         :return:
         """
         for child in self.children:
-
-            if self.parent and child:
-                child.mutation = self.compare_no_null(child)
-            if self.parent and not child:
-                child.mutation = self.compare_null_child()
-            if not self.parent and child:
-                child.mutation = self.compare_null_parent(child)
-
-
-class MultiSampleRow(Row):
-    def __init__(self, recs):
-        """
-        The multisample row represents a row taken from a vcf with multiple sample per file.
-        :param recs:
-        """
-        Row.__init__(self)
-        #if not raw_data[0].FILTER:
-        #    self.make_children(parent=parent_call_name)
-
-    def make_children(self, parent):
-        """
-
-        :param parent:
-        :return:
-        """
-        # TODO
-        pass
-
-
-class MultiFileRow(Row):
-    parent_index = 0
-
-    def __init__(self, recs):
-        """
-        Represents a row created from multiple vcfs
-        :param recs:
-        """
-        Row.__init__(self)
-
-        if recs[self.parent_index]:
-            print "here"
-            parent_rec = recs[self.parent_index]
-            name = self.extract_name(self.file_names[self.parent_index])
-            al = parent_rec.samples[0].gt_bases[-1]
-            gt = parent_rec.samples[0].gt_type
-            gt_data = parent_rec.samples[0].data
-
-            self.parent = Child(name,al,gt,gt_data)
-            self.ref = parent_rec.REF
-            self.pos = int(parent_rec.POS)
-            self.chrom = parent_rec.CHROM
-            self.make_children(recs)
-
-        elif not recs[self.parent_index]:
-            self.parent = None
-            self.make_children(recs)
-
-    def make_children(self, recs):
-        """
-        Adds a Child() for each child in the row.
-        :param recs:
-        :return:
-        """
-
-        '''
-        compare parents and chidlren while creating the children.
-        
-        '''
-        for idx, rec in enumerate(recs):
-            if idx != self.parent_index:
-                name = self.extract_name(self.file_names[idx])
-                if rec and not rec.FILTER:
-                    al = rec.samples[0].gt_bases[-1]
-                    gt = rec.samples[0].gt_type
-                    gt_data = rec.samples[0].data
-
-                    if not (self.pos and self.chrom):
-                        self.pos = int(rec.POS)
-                        self.chrom = rec.CHROM
-                        self.ref = rec.REF
-                else:
-                    al = self.ref
-                    gt = 0
-                    gt_data = self.parent.gt_data
-                self.children.append(Child(name, al, gt, gt_data))
+            mut = ''
+            if self.parent.gt == 1 and child.gt == 0:
+                mut = 'loh'
+            elif self.parent.gt != 1 and child.gt == 1:
+                mut = 'het'
+            elif self.parent.al != child.al:
+                mut = 'hom'
+            child.mutation = mut
 
 
 class VCFWriter:
@@ -341,10 +230,9 @@ class CSVWriter():
         """
         if outfile:
             self.outfile = open(outfile, "w")
-        else:
-            self.outfile = open(Row.file_names[0][:-4]+".comparevcf.csv", "w")
 
         self.csv_writer = csv.writer(self.outfile)
+        self.csv_writer.writerow(["Parent", "Progeny", "Chromosome", "Position", "ParentAllele", "ParentGenotype", "ChildAllele", "ChildGenotype","Gene","Mutation"])
 
     def __enter__(self):
         return self
@@ -378,9 +266,9 @@ class CSVWriter():
         """
         formatted_rows = []
         for child in row.children:
-
             if child.mutation:
-                csv_row = [row.parent_name, child.name, row.chrom, row.pos, row.gene, child.mutation]
+                csv_row = [row.parent.name, child.name, row.chrom, row.pos, row.parent.al, row.parent.formatted_gt,
+                           child.al, child.formatted_gt, row.gene, child.mutation]
                 formatted_rows.append(csv_row)
 
         return formatted_rows
@@ -438,6 +326,16 @@ class Comparator():
             adjusted_reader = reader.fetch(loc_chr, start, end)
         return adjusted_reader
 
+    @staticmethod
+    def extract_name(file_name):
+        """
+        :param file_name:
+        :return:
+        """
+        start_index = file_name.rfind("/") + 1
+        end_index = file_name.find(".")
+        return file_name[start_index:end_index]
+
 
 class MultiSampleComparator(Comparator):
 
@@ -454,7 +352,7 @@ class MultiSampleComparator(Comparator):
         :return: a MultiSampleRow()
         """
         rec=next(self.readers[0])
-        return MultiSampleRow(rec)
+        return Row(rec)
 
 
 class MultiFileComparator(Comparator):
@@ -474,25 +372,37 @@ class MultiFileComparator(Comparator):
         """
         while True:
             recs = self.walker.next()
-            if self.valid_recs(recs):
-                row = MultiFileRow(recs)
+            if recs[0]:
+                chrom = recs[0].CHROM
+                pos = recs[0].POS
+                parent = self.make_child(0,recs[0])
+                children = self.make_children(recs)
+
+                row = Row(chrom, pos, parent, children)
                 return row
 
-    @staticmethod
-    def valid_recs(recs):
-        valid = True
-        if not any(isinstance(x, vcf.model._Record) for x in recs):
-            valid = False
-        if recs[0] and recs[0].FILTER:
-            valid = False
-        return valid
+    def make_children(self,recs):
+        children = []
+        for idx,rec in enumerate(recs[1:]):
+            if rec:
+                children.append(self.make_child(idx+1, rec))
+        return children
+
+    def make_child(self, idx, rec):
+
+        name = self.extract_name(self.infiles[idx])
+        try:
+            al = rec.samples[0].gt_bases[-1]
+            gt = rec.samples[0].gt_type
+            gt_data = rec.samples[0].data
+        except TypeError:
+            al = rec.REF
+            gt = 0
+            gt_data = None
+        return Child(name, al, gt, gt_data)
 
 
 def main():
-    """
-
-    :return:
-    """
     parser = argparse.ArgumentParser(
         description="Compare one parent vcf to one or more child vcfs. All files should be bgzipped and tabix indexed.")
     parser.add_argument("infiles", nargs="+", help='''The locations of all files to be compared.
@@ -514,31 +424,23 @@ def main():
                         help='''Name of the outfile. By default the outfile is the name of the parent followed by the
                         extension''')
     path = "/Users/cwf08523/PycharmProjects/CompareVCFs/test_data/"
-    args = parser.parse_args([path + "SC5314_parental_trimmed_sorted_rmdup_realigned.bam.gatk.vcf.gz",
-                              path + "aleeza1_trimmed_sorted_rmdup_realigned.bam.gatk.vcf.gz",
-                              path + "aleeza3_trimmed_sorted_rmdup_realigned.bam.gatk.vcf.gz",
-                              "--parent",
-                              "SC5314",
+
+    args = parser.parse_args([path + "SC5314.filtered.vcf.gz", path + "Aleeza10.filtered.vcf.gz",
+                              path + "Aleeza11.filtered.vcf.gz", "--parent", "SC5314", '--outfile', "testout.csv",
                               "--gff",
                               path + "C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
-                              "--csv",])
-
-    Row.parent_name = args.parent
-    Row.file_names = args.infiles
+                              ])
 
     if args.gff:
         feat = Genes(args.gff)
         Row.features = feat.gene_dict
 
     if len(args.infiles) > 1:
-        MultiFileRow.parent_index = args.infiles.index(process.extractOne(args.parent, args.infiles)[0])
-        MultiFileRow.file_names = args.infiles
         comp = MultiFileComparator
     else:
         comp = MultiSampleComparator
 
     with comp(args) as cp:
-
         if args.csv:
             writer = CSVWriter
             writer_args = [args.outfile]
