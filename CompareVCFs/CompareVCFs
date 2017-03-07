@@ -388,7 +388,7 @@ class MultiFileComparator(Comparator):
         """
         while True:
             recs = self.walker.next()
-            if recs[0] and not recs[0].FILTER:
+            if self.filter_rec(recs[0]):
                 chrom = recs[0].CHROM
                 pos = recs[0].POS
                 parent = self.make_child(0,recs[0])
@@ -406,6 +406,10 @@ class MultiFileComparator(Comparator):
     
     @staticmethod
     def filter_rec(rec):
+	if len(rec.ALT)>1:
+            return False
+        if len(rec.REF)>1:
+            return False
 	if not rec:
             return False
         if rec.FILTER:
@@ -461,63 +465,6 @@ def main():
     parser.add_argument("--outfile",
                         help='''Name of the outfile. By default the outfile is the name of the parent followed by the
                         extension''')
-
-
-    """path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_annotated/"
-    args = parser.parse_args([path + "SC5314_parental_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path +"aleeza3_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"Aleeza7_S1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"Aleeza9_S3_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"aleeza10_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              "--parent", "SC5314", '--outfile', "regular_2n.csv",
-                              "--gff",
-                              "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
-                              "--csv"])
-    """
-
-    """path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_annotated/"
-    args = parser.parse_args([path + "SC5314_parental_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path +"aleeza3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"Aleeza7_S1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"Aleeza9_S3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              path+"aleeza10_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
-                              "--parent", "SC5314", '--outfile', "regular_4n.csv",
-                              "--gff",
-                              "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
-                              "--csv"])"""
-
-    """path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_stringent/"
-    args = parser.parse_args([path + "SC5314_parental_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path +"aleeza3_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path+"Aleeza7_S1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path+"Aleeza9_S3_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              path+"aleeza10_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
-                              "--parent", "SC5314", '--outfile', "stringent_2n.csv",
-                              "--gff",
-                              "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
-                              "--csv"])
-    """
-
-    """path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_stringent/"
-    args = parser.parse_args(
-        [path + "SC5314_parental_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "aleeza3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "Aleeza7_S1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "Aleeza9_S3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         path + "aleeza10_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
-         "--parent", "SC5314", '--outfile', "stringent_4n.csv",
-         "--gff",
-         "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
-         "--csv"])
-	"""
 
     args = parser.parse_args()
 
