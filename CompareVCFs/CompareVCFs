@@ -247,7 +247,8 @@ class CSVWriter():
             self.outfile = open(outfile, "w")
 
         self.csv_writer = csv.writer(self.outfile)
-        self.csv_writer.writerow(["Parent", "Progeny", "Chromosome", "Position", "ParentAlleles", "ChildAlleles", "Gene","Mutation","ParentDepth","ChildDepth"])
+        self.csv_writer.writerow(["Progeny", "Chromosome", "Position", "Reference", "ParentAlleles", "ChildAlleles",
+                                  "Gene", "Mutation", "ParentDepth", "ChildDepth"])
 
     def __enter__(self):
         return self
@@ -282,7 +283,7 @@ class CSVWriter():
         formatted_rows = []
         for child in row.children:
             if child.mutation:
-                csv_row = [row.parent.name, child.name, row.chrom, row.pos, child.ref, row.parent.formatted_al,
+                csv_row = [child.name, row.chrom, row.pos, child.ref, row.parent.formatted_al,
                            child.formatted_al, row.gene, child.mutation, row.parent.dp, child.dp]
                 formatted_rows.append(csv_row)
         return formatted_rows
@@ -341,6 +342,24 @@ class Comparator():
             end = int(self.location[2])
             adjusted_reader = reader.fetch(loc_chr, start, end)
         return adjusted_reader
+
+    @staticmethod
+    def filter_rec(rec):
+        if len(rec.ALT)>1:
+            return False
+        if len(rec.REF)>1:
+            return False
+        if not rec:
+            return False
+        if rec.FILTER:
+            return False
+        if "DP" not in rec.INFO:
+            return False
+        if rec.INFO["DP"] < 15:
+            return False
+        if "HaplotypeScore" in rec.INFO and rec.INFO["HaplotypeScore"]>13:
+            return False
+        return True
 
     @staticmethod
     def extract_name(file_name):
@@ -403,24 +422,6 @@ class MultiFileComparator(Comparator):
             if self.filter_rec(rec):
                 children.append(self.make_child(idx+1, rec))
         return children
-    
-    @staticmethod
-    def filter_rec(rec):
-	if len(rec.ALT)>1:
-            return False
-        if len(rec.REF)>1:
-            return False
-	if not rec:
-            return False
-        if rec.FILTER:
-            return False
-	if "DP" not in rec.INFO:
-            return False
-        if rec.INFO["DP"] < 15:
-            return False
-        if "HaplotypeScore" in rec.INFO and rec.INFO["HaplotypeScore"]>13:
-            return False
-        return True
 
     def make_child(self, idx, rec):
         name = self.extract_name(self.infiles[idx])
