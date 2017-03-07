@@ -412,7 +412,7 @@ class MultiFileComparator(Comparator):
             return False
 	if "DP" not in rec.INFO:
             return False
-        if rec.INFO["DP"] > 15:
+        if rec.INFO["DP"] < 15:
             return False
         if "HaplotypeScore" in rec.INFO and rec.INFO["HaplotypeScore"]>13:
             return False
