@@ -489,7 +489,7 @@ def main():
                               "--csv"])
     """
 
-    path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_stringent/"
+    """path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_stringent/"
     args = parser.parse_args(
         [path + "SC5314_parental_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
          path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
@@ -502,9 +502,9 @@ def main():
          "--gff",
          "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
          "--csv"])
+    """
 
-
-    #args = parser.parse_args()
+    args = parser.parse_args()
 
     if args.gff:
         feat = Genes(args.gff)
