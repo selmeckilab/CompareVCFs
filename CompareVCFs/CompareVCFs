@@ -59,7 +59,7 @@ class Genes(object):
 
 
 class Child(object):
-    def __init__(self, name, al, gt, gt_data):
+    def __init__(self, name, al, gt, gt_data, dp, mq, mq0, ref):
         """
 
         :param name:
@@ -72,6 +72,19 @@ class Child(object):
         self.gt = gt
         self.gt_data = gt_data
         self.mutation = None
+        self.bp = dp
+        self.mq = mq
+        self.mq0 = mq0
+        self.ref = ref
+
+    @property
+    def formatted_al(self):
+        formatted_al = ''
+        if self.gt == 0 or self.gt == 1:
+            formatted_al = self.al*2
+        else:
+            formatted_al == self.ref + "/" + self.al
+        return formatted_al
 
     @property
     def formatted_gt(self):
@@ -145,9 +158,9 @@ class Row(object):
             if self.parent.gt == 1 and child.gt == 0:
                 mut = 'loh'
             elif self.parent.gt != 1 and child.gt == 1:
-                mut = 'het'
+                mut = 'heterozygous'
             elif self.parent.al != child.al:
-                mut = 'hom'
+                mut = 'homozygous'
             child.mutation = mut
 
 
@@ -269,8 +282,8 @@ class CSVWriter():
         formatted_rows = []
         for child in row.children:
             if child.mutation:
-                csv_row = [row.parent.name, child.name, row.chrom, row.pos, row.parent.al, row.parent.formatted_gt,
-                           child.al, child.formatted_gt, row.gene, child.mutation]
+                csv_row = [row.parent.name, child.name, row.chrom, row.pos, child.ref, row.parent.formatted_al,
+                           child.formatted_al, row.gene, child.mutation]
                 formatted_rows.append(csv_row)
 
         return formatted_rows
@@ -392,6 +405,15 @@ class MultiFileComparator(Comparator):
 
     def make_child(self, idx, rec):
         name = self.extract_name(self.infiles[idx])
+        ref = rec.REF
+        try:
+            dp = rec.INFO["DP"]
+            mq = rec.INFO["MQ"]
+            mq0 = rec.INFO["MQ0"]
+        except KeyError:
+            dp = ''
+            mq = ''
+            mq0 = ''
         try:
             al = rec.samples[0].gt_bases[-1]
             gt = rec.samples[0].gt_type
@@ -400,7 +422,7 @@ class MultiFileComparator(Comparator):
             al = rec.REF
             gt = 0
             gt_data = None
-        return Child(name, al, gt, gt_data)
+        return Child(name, al, gt, gt_data, dp, mq, mq0, ref)
 
 
 def main():
@@ -426,7 +448,7 @@ def main():
                         extension''')
 
 
-    path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_annotated/"
+    """path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_annotated/"
     args = parser.parse_args([path + "SC5314_parental_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
                               path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
                               path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_snpeffann.bam.gatk.vcf.gz",
@@ -438,6 +460,7 @@ def main():
                               "--gff",
                               "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
                               "--csv"])
+    """
 
     """path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_annotated/"
     args = parser.parse_args([path + "SC5314_parental_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_snpeffann.bam.gatk.vcf.gz",
@@ -451,7 +474,8 @@ def main():
                               "--gff",
                               "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
                               "--csv"])"""
-    """"path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_stringent/"
+
+    """path = "/Users/cwf08523/Documents/snpanalysis/2N_emitall_stringent/"
     args = parser.parse_args([path + "SC5314_parental_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
                               path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
                               path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_2N_flagged_stringent_snpeffann.bam.gatk.vcf",
@@ -464,6 +488,24 @@ def main():
                               "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
                               "--csv"])
     """
+
+    path = "/Users/cwf08523/Documents/snpanalysis/4N_emitall_stringent/"
+    args = parser.parse_args(
+        [path + "SC5314_parental_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "6_Calb_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "aleeza1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "aleeza3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "Aleeza7_S1_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "Aleeza9_S3_trimmed_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         path + "aleeza10_merged_trimmed_bwa_sorted_rmdup_realigned_emitall_4N_flagged_stringent_snpeffann.bam.gatk.vcf",
+         "--parent", "SC5314", '--outfile', "stringent_4n.csv",
+         "--gff",
+         "/Users/cwf08523/PyCharmProjects/CompareVCFs/test_data/C_albicans_SC5314_version_A21-s02-m09-r08_features_with_chromosome_sequences.gff",
+         "--csv"])
+
+
+    #args = parser.parse_args()
+
     if args.gff:
         feat = Genes(args.gff)
         Row.features = feat.gene_dict
