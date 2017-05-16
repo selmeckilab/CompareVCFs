@@ -59,7 +59,7 @@ class Genes(object):
 
 
 class Child(object):
-    def __init__(self, name, al, gt, gt_data, dp, mq, mq0, ref):
+    def __init__(self, name, al, gt, gt_data, dp, mq, mq0, ref, effect):
         """
 
         :param name:
@@ -76,6 +76,7 @@ class Child(object):
         self.mq = mq
         self.mq0 = mq0
         self.ref = ref
+        self.effect = effect
 
     @property
     def formatted_al(self):
@@ -96,15 +97,6 @@ class Child(object):
         else:
             formatted_gt = "1/1"
         return formatted_gt
-
-    @property
-    def effect(self):
-        #TODO
-        """
-
-        :rtype: str
-        """
-        return ""
 
     def __str__(self):
         return "Name:" + self.name + " Allele:" + str(self.al) + " Genotype:" + str(self.gt) + " MutationType:" + str(
@@ -437,11 +429,25 @@ class MultiFileComparator(Comparator):
             al = rec.samples[0].gt_bases[-1]
             gt = rec.samples[0].gt_type
             gt_data = rec.samples[0].data
+            effect = self.get_effect(rec)
         except TypeError:
             al = rec.REF
             gt = 0
             gt_data = None
-        return Child(name, al, gt, gt_data, dp, mq, mq0, ref)
+            effect = 0
+        return Child(name, al, gt, gt_data, dp, mq, mq0, ref, effect)
+
+    def get_effect(rec):
+        desired_annotations = ["synonymous_variant", "stop_gained", "missense_variant"]
+        effects = []
+        if "ANN" in rec.INFO:
+            ann_info = rec.INFO["ANN"]
+            annotations = [ann.split("|") for ann in ann_info.split(",")]
+            for annotation in annotations:
+                if annotation[1] in desired_annotations:
+                    effect = (annotation[1], annotation[10])
+                    effects.append(effect)
+        return effects
 
 
 def main():
