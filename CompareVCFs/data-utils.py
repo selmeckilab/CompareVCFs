@@ -1,4 +1,4 @@
-#!/anaconda/bin/python
+#!/home/cwf08523/anaconda2/bin/python
 
 import psycopg2
 import csv
