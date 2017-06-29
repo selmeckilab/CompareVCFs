@@ -151,10 +151,36 @@ def process_gff(args):
     pass
 
 
+def varscan_generator(filename):
+    child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
+
+    with open(filename, 'r') as infile:
+        reader = csv.reader(infile)
+        next(reader,None)
+        for row in reader:
+            newrow = [child_name] + row
+            newrow[6] = float(newrow[6].strip('%'))/100
+            newrow[10] = float(newrow[10].strip('%'))/100
+            yield row
+
+
+def process_varscan(conn,filename):
+    c = conn.cursor()
+
+
+    read_info_sql = "INSERT INTO varscan (child, chromosome, position, refernce, variant, normal_reads1, normal_reads2,"\
+                    " normal_var_freq, normal_gt, tumor_reads1, tumor_reads2," \
+                    " tumor_reads2, tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
+                    "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
+                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus) "\
+                    "VALUES %s"
+    temp = "("+"%s,"* 23 + "%s)"
+    execute_values(c, read_info_sql, varscan_generator(filename), template=temp)
+
 def add_read_data(args):
     try:
         conn = psycopg2.connect(
-            "dbname='postgres' host='localhost' user='" + config.username + "' password='" + config.password + "'")
+            "dbname='postgres' host='"+config.host+"' user='" + config.username + "' password='" + config.password + "'")
     except psycopg2.OperationalError:
         print "Unable to connect to the database"
     if args.directory:
@@ -189,16 +215,25 @@ def main():
                                            'treated as a directory and all .vcf or .vcf.gz'
                                            'files will be added.')
     bam_readcount_parser.set_defaults(func=bamreadcount_add_strain)
+
     vcf_parser = subparsers.add_parser('vcf',
                                        help='Adds read counts and alternate allele frequency and other variables'
                                             'using bam-readcounts outpu')
-
     vcf_parser.add_argument('name', help='The name of the file or directory you want to process')
     vcf_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
                                                                      'treated as a directory and all .allelecount'
                                                                      'files are added. Otherwise the input is assumed '
                                                                      'to be one file.')
-    vcf_parser.set_defaults(func=vcf_add_strain)
+
+    varscan_parser = subparsers.add_parser('vcf',
+                                       help='Adds both snps and indels from varscan. The files show share the same prefix'
+                                            'the snp file should end with .snp and the indel file with .indel')
+    varscan_parser.add_argument('name', help='The name of the file or directory you want to process')
+    varscan_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
+                                                                     'treated as a directory and all .allelecount'
+                                                                     'files are added. Otherwise the input is assumed '
+                                                                     'to be one file.')
+    varscan_parser.set_defaults(func=vcf_add_strain)
 
     # TODO Make gff processer
     # gff_parser = subparsers.add_parser('gff', help="Adds gff data to DB")
