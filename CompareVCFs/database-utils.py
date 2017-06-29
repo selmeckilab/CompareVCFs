@@ -1,4 +1,4 @@
-#!/anaconda/bin/python
+#!/home/cwf08523/anaconda2/bin/python
 import vcf
 import psycopg2
 import csv
@@ -71,6 +71,9 @@ def sequenza_add_strain(conn, reads_file):
 
 
 def bamreadcount_add_strain(conn, reads_file):
+    if reads_file[reads_file.rfind('.')+1:] != 'bamreadcounts':
+        print "Not a bamreadcount file", reads_file
+        return
     c = conn.cursor()
     strain_name = reads_file[reads_file.rfind('/') + 1: reads_file.find('_trimmed')]
     print "Adding strain: " + strain_name
@@ -124,6 +127,9 @@ def bamreadcount_add_strain(conn, reads_file):
 
 
 def vcf_add_strain(conn, filename):
+    if filename[filename.rfind('.')+1:] != 'vcf':
+        print 'Not a vcf', filename
+        return
     c = conn.cursor()
     child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
     print "Adding:", child_name
@@ -153,8 +159,7 @@ def process_gff(args):
 
 def add_read_data(args):
     try:
-        conn = psycopg2.connect(
-            "dbname='postgres' host='localhost' user='" + config.username + "' password='" + config.password + "'")
+        conn = psycopg2.connect(config.pg_uri)
     except psycopg2.OperationalError:
         print "Unable to connect to the database"
     if args.directory:
@@ -171,10 +176,10 @@ def main():
     # TODO Add parser for database parameters
     # db_info_parser = argparse.ArgumentParser(description='Parses database info')
 
-    parser = argparse.ArgumentParser(prog="data")
+    parser = argparse.ArgumentParser(prog="database-utils")
     subparsers = parser.add_subparsers(help='sub-command help')
-    sequenza_parser = subparsers.add_parser('sequenzareadcount', help=' Adds read counts and alternate allele frequency'
-                                                                      ' using sequenza utils output')
+    sequenza_parser = subparsers.add_parser('sequenzareadcount', help='Adds read counts and alternate allele frequency'
+                                                                      ' to mutations table from sequenza output.')
     sequenza_parser.add_argument('name', help='The name of the file or directory you want to process')
     sequenza_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
                                                                           'treated as a directory and all .allelecount'
@@ -182,7 +187,7 @@ def main():
                                                                           'assumed to be one file.')
     sequenza_parser.set_defaults(func=sequenza_add_strain)
     bam_readcount_parser = subparsers.add_parser('bamreadcount',
-                                                 help='Adds mutect')
+                                                 help='Adds read count data from bamreadcount to mutations and read_info tables')
     bam_readcount_parser.add_argument('name', help='The name of the file or directory you want to process')
     bam_readcount_parser.add_argument('--directory', action='store_true',
                                       help='If this flag is present the input will be '
@@ -190,8 +195,7 @@ def main():
                                            'files will be added.')
     bam_readcount_parser.set_defaults(func=bamreadcount_add_strain)
     vcf_parser = subparsers.add_parser('vcf',
-                                       help='Adds read counts and alternate allele frequency and other variables'
-                                            'using bam-readcounts outpu')
+                                       help='Using a mutect vcf, Adds mutations to mutations table and snpeff annotations to to the annotations table if annotations are present')
 
     vcf_parser.add_argument('name', help='The name of the file or directory you want to process')
     vcf_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
