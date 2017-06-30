@@ -156,32 +156,52 @@ def process_gff(args):
     # TODO Add code to add gff data into db
     pass
 
-
-def varscan_generator(filename):
+def varscan_generator(filename, variant_type):
     child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
 
     with open(filename, 'r') as infile:
-        reader = csv.reader(infile)
+        reader = csv.reader(infile,delimiter='\t')
         next(reader,None)
         for row in reader:
-            newrow = [child_name] + row
-            newrow[6] = float(newrow[6].strip('%'))/100
-            newrow[10] = float(newrow[10].strip('%'))/100
-            yield row
+            newrow = [child_name] + row +[variant_type]
+            newrow[7] = float(newrow[7].strip('%'))/100
+            newrow[11] = float(newrow[11].strip('%'))/100
+            yield newrow
 
 
-def process_varscan(conn,filename):
+def varscan_add_strain(conn,filename):
     c = conn.cursor()
-
-
-    read_info_sql = "INSERT INTO varscan (child, chromosome, position, refernce, variant, normal_reads1, normal_reads2,"\
+    if filename[-8:]!='filtered':
+        print filename, 'is not a filtered varscan output. All files should end in .filtered'
+        return
+    read_info_sql = "INSERT INTO varscan (child, chromosome, position, reference, variant, normal_reads1, normal_reads2,"\
                     " normal_var_freq, normal_gt, tumor_reads1, tumor_reads2," \
-                    " tumor_reads2, tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
+                    " tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
                     "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
-                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus) "\
+                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus, variant_type) "\
                     "VALUES %s"
-    temp = "("+"%s,"* 23 + "%s)"
-    execute_values(c, read_info_sql, varscan_generator(filename), template=temp)
+    temp = "("+"%s,"* 24 + "%s)"
+    execute_values(c, read_info_sql, varscan_generator(filename, 'snp'), template=temp)
+    c.close()
+    conn.commit()
+
+def indel_add_strain(conn,filename):
+    c = conn.cursor()
+    if filename[-5:]!='indel':
+        print filename, 'All files should end in .indel'
+        return
+    print 'Adding strain', filename
+    read_info_sql = "INSERT INTO varscan (child, chromosome, position, reference, variant, normal_reads1, normal_reads2,"\
+                    " normal_var_freq, normal_gt, tumor_reads1, tumor_reads2," \
+                    " tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
+                    "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
+                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus, variant_type) "\
+                    "VALUES %s"
+    temp = "("+"%s,"* 24 + "%s)"
+    execute_values(c, read_info_sql, varscan_generator(filename,'indel'), template=temp)
+    c.close()
+    conn.commit()
+
 
 def add_read_data(args):
     try:
@@ -230,23 +250,30 @@ def main():
                                                                      'files are added. Otherwise the input is assumed '
                                                                      'to be one file.')
 
-    varscan_parser = subparsers.add_parser('vcf',
-                                       help='Adds both snps and indels from varscan. The files show share the same prefix'
-                                            'the snp file should end with .snp and the indel file with .indel')
+    varscan_parser = subparsers.add_parser('varscan',
+                                       help='Adds snps from varscan. The file must end in .filtered')
     varscan_parser.add_argument('name', help='The name of the file or directory you want to process')
     varscan_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
                                                                      'treated as a directory and all .allelecount'
                                                                      'files are added. Otherwise the input is assumed '
                                                                      'to be one file.')
-    varscan_parser.set_defaults(func=vcf_add_strain)
+    varscan_parser.set_defaults(func=varscan_add_strain)
 
+    indel_parser = subparsers.add_parser('indel',
+                                       help='Adds varscan indels to db. File should end in .indel')
+    indel_parser.add_argument('name', help='The name of the file or directory you want to process')
+    indel_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
+                                                                     'treated as a directory and all .allelecount'
+                                                                     'files are added. Otherwise the input is assumed '
+                                                                     'to be one file.')
+    indel_parser.set_defaults(func=indel_add_strain)
     # TODO Make gff processer
     # gff_parser = subparsers.add_parser('gff', help="Adds gff data to DB")
     # gff_parser.add_argument('--directory', action='store_true')
     # gff_parser.set_defaults(func=process_gff())
 
     args = parser.parse_args()
-    if args.func == bamreadcount_add_strain or args.func == sequenza_add_strain or args.func == vcf_add_strain:
+    if args.func in [bamreadcount_add_strain,sequenza_add_strain,vcf_add_strain,varscan_add_strain,indel_add_strain]:
         add_read_data(args)
     else:
         args.func(args)
