@@ -10,7 +10,7 @@ except ImportError:
 import argparse
 from psycopg2.extensions import AsIs
 from psycopg2.extras import execute_values
-
+from collections import OrderedDict
 
 def sequenza_add_strain(conn, reads_file):
     # Connect to the database
@@ -146,10 +146,47 @@ def vcf_add_strain(conn, filename):
     c.close()
     conn.commit()
 
-def process_gff(args):
-    # TODO Add code to add gff data into db
-    pass
 
+def fix_encoding(s):
+    character_list=[('%20',' '), ('%28', '('), ('%29', ')'), ('%3B', ';'), ('%2C', ','), ('%3A', ':'), ('%2F', '/')]
+    for tup in character_list:
+         s=s.replace(tup[0], tup[1])
+    return s
+
+
+def process_gff(conn, infile):
+    c = conn.cursor()
+    with open(infile, 'r') as infile:
+        reader = csv.reader(infile, delimiter='\t')
+        for row in reader:
+            if row[0] == "##FASTA":
+                break
+            elif '#' in row[0]:
+                continue
+
+            newrow = [i if i != '.' else None for i in row[:-1]]
+            attributes = row[-1].split(';')
+            unsorted_dict={'orf_classification':'', 'Name':'', 'Parent':'', 'parent_feature_type':'', 'Note':'', 'Alias':'', 'Gene':'', 'ID':''}
+
+            attr_dict = OrderedDict(sorted(unsorted_dict.items(), key=lambda t: t[0]))
+
+            for attr in attributes:
+                attr_key = attr[:attr.find('=')]
+                attr_value = fix_encoding(attr[attr.find('=')+1:])
+                attr_dict[attr_key] = attr_value
+
+            position_range = '[' + newrow[3] + ',' + newrow[4] + ']'
+
+            vals = tuple(newrow[:3] + [position_range] + newrow[5:] + attr_dict.values())
+            c.execute(
+                "INSERT INTO public.features(chromosome, source, feature, positionrange, score,"
+                "strand, frame, alias, gene, id , feature_name, note, parent, orf_classification, parent_feature_type"
+                ") VALUES"
+                "("+"%s,"*14 + "%s);",
+                vals)
+    c.close()
+    conn.commit()
+    conn.close()
 
 def varscan_generator(filename):
     child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
@@ -174,23 +211,10 @@ def process_varscan(conn,filename):
                     "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
                     " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus) "\
                     "VALUES %s"
-    temp = "("+"%s,"* 23 + "%s)"
+    temp = "("+"%s," * 23 + "%s)"
     execute_values(c, read_info_sql, varscan_generator(filename), template=temp)
 
-def add_read_data(args):
-    try:
-        conn = psycopg2.connect(
-            "dbname='postgres' host='"+config.host+"' user='" + config.username + "' password='" + config.password + "'")
-    except psycopg2.OperationalError:
-        print "Unable to connect to the database"
-    if args.directory:
-        infiles = glob.glob(args.name + '/*')
-        for infile in infiles:
-            args.func(conn, infile)
-    else:
-        infile = args.name
-        args.func(conn, infile)
-    conn.close()
+
 
 
 def main():
@@ -235,17 +259,29 @@ def main():
                                                                      'to be one file.')
     varscan_parser.set_defaults(func=vcf_add_strain)
 
-    # TODO Make gff processer
-    # gff_parser = subparsers.add_parser('gff', help="Adds gff data to DB")
-    # gff_parser.add_argument('--directory', action='store_true')
-    # gff_parser.set_defaults(func=process_gff())
+    gff_parser = subparsers.add_parser('gff', help="Adds gff data to DB")
+    gff_parser.add_argument('name', help='The path of the gff file')
+    gff_parser.set_defaults(func=process_gff)
 
     args = parser.parse_args()
-    if args.func == bamreadcount_add_strain or args.func == sequenza_add_strain or args.func == vcf_add_strain:
-        add_read_data(args)
-    else:
-        args.func(args)
+    try:
+        conn = psycopg2.connect(
+            "dbname='postgres' host='"+config.host+"' user='" + config.username + "' password='" + config.password + "'")
+    except psycopg2.OperationalError:
+        print "Unable to connect to the database"
 
+
+    if args.func == process_gff:
+        infile = args.name
+        args.func(conn, infile)
+    elif args.directory:
+        infiles = glob.glob(args.name + '/*')
+        for infile in infiles:
+            args.func(conn, infile)
+    else:
+        infile = args.name
+        args.func(conn, infile)
+    conn.close()
 
 if __name__ == "__main__":
     main()
