@@ -82,12 +82,16 @@ def bamreadcount_add_strain(conn, reads_file):
         [strain_name]
     )
     positions = c.fetchall()
-
+    print positions
     c.execute(
         "SELECT count(*) FROM read_info WHERE child = (%s);",
         [strain_name]
     )
+    chroms={'Ca19-mtDNA':0,'Ca21chr1_C_albicans_SC5314':1,'Ca21chr2_C_albicans_SC5314':2, 'Ca21chr3_C_albicans_SC5314':3,
+            'Ca21chr4_C_albicans_SC5314':4,'Ca21chr5_C_albicans_SC5314':5, 'Ca21chr6_C_albicans_SC5314':6,
+            'Ca21chr7_C_albicans_SC5314':7,'Ca21chrR_C_albicans_SC5314':8}
     already_added = c.fetchone()
+    
     if already_added[0] == 0 and len(positions) > 0:
         print 'Updating ' + str(len(positions)) + ' positions.'
         next_position = positions.pop(0)
@@ -96,6 +100,11 @@ def bamreadcount_add_strain(conn, reads_file):
         with open(reads_file, 'r') as infile:
             reader = csv.reader(infile, delimiter='\t')
             for row in reader:
+                if (next_position[0] == row[0] and next_position[1] < int(row[1]) or chroms[next_position[0]] < chroms[row[0]]):
+                    try:
+                        next_position = positions.pop(0)
+                    except IndexError:
+                        break
                 if next_position[0] == row[0] and str(next_position[1]) == row[1]:
                     base_values = [strain_name, row[0], row[1]]
                     for info in row[5:10]:
@@ -120,10 +129,10 @@ def bamreadcount_add_strain(conn, reads_file):
                         "VALUES %s"
         temp = "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
         execute_values(c, read_info_sql, read_info_values, template=temp)
-
+    print 'Complete'
+    
     c.close()
     conn.commit()
-
 
 
 def vcf_add_strain(conn, filename):
