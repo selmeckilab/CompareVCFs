@@ -293,6 +293,7 @@ class Comparator():
         self.files = [open(f, "r") for f in args.infiles]
         self.readers = [self.get_location(vcf.Reader(f)) for f in self.files]
         self.rows_processed = 0
+
     def __enter__(self):
         return self
 
@@ -437,6 +438,7 @@ class MultiFileComparator(Comparator):
             effect = 0
         return Child(name, al, gt, gt_data, dp, mq, mq0, ref, effect)
 
+    @staticmethod
     def get_effect(rec):
         desired_annotations = ["synonymous_variant", "stop_gained", "missense_variant"]
         effects = []

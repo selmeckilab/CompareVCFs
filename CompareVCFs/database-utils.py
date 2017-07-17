@@ -195,7 +195,6 @@ def process_gff(conn, infile):
 
 def varscan_generator(filename):
     child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
-
     with open(filename, 'r') as infile:
         reader = csv.reader(infile)
         next(reader,None)
