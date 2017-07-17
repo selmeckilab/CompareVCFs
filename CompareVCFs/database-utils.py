@@ -82,12 +82,16 @@ def bamreadcount_add_strain(conn, reads_file):
         [strain_name]
     )
     positions = c.fetchall()
-
+    print positions
     c.execute(
         "SELECT count(*) FROM read_info WHERE child = (%s);",
         [strain_name]
     )
+    chroms={'Ca19-mtDNA':0,'Ca21chr1_C_albicans_SC5314':1,'Ca21chr2_C_albicans_SC5314':2, 'Ca21chr3_C_albicans_SC5314':3,
+            'Ca21chr4_C_albicans_SC5314':4,'Ca21chr5_C_albicans_SC5314':5, 'Ca21chr6_C_albicans_SC5314':6,
+            'Ca21chr7_C_albicans_SC5314':7,'Ca21chrR_C_albicans_SC5314':8}
     already_added = c.fetchone()
+    
     if already_added[0] == 0 and len(positions) > 0:
         print 'Updating ' + str(len(positions)) + ' positions.'
         next_position = positions.pop(0)
@@ -96,6 +100,11 @@ def bamreadcount_add_strain(conn, reads_file):
         with open(reads_file, 'r') as infile:
             reader = csv.reader(infile, delimiter='\t')
             for row in reader:
+                if (next_position[0] == row[0] and next_position[1] < int(row[1]) or chroms[next_position[0]] < chroms[row[0]]):
+                    try:
+                        next_position = positions.pop(0)
+                    except IndexError:
+                        break
                 if next_position[0] == row[0] and str(next_position[1]) == row[1]:
                     base_values = [strain_name, row[0], row[1]]
                     for info in row[5:10]:
@@ -120,10 +129,10 @@ def bamreadcount_add_strain(conn, reads_file):
                         "VALUES %s"
         temp = "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
         execute_values(c, read_info_sql, read_info_values, template=temp)
-
+    print 'Complete'
+    
     c.close()
     conn.commit()
-
 
 
 def vcf_add_strain(conn, filename):
@@ -196,25 +205,48 @@ def process_gff(conn, infile):
 def varscan_generator(filename):
     child_name = filename[filename.rfind("/") + 1:filename.find("_trimmed")]
     with open(filename, 'r') as infile:
-        reader = csv.reader(infile)
+        reader = csv.reader(infile,delimiter='\t')
         next(reader,None)
         for row in reader:
-            newrow = [child_name] + row
-            newrow[6] = float(newrow[6].strip('%'))/100
-            newrow[10] = float(newrow[10].strip('%'))/100
-            yield row
+            newrow = [child_name] + row +[variant_type]
+            newrow[7] = float(newrow[7].strip('%'))/100
+            newrow[11] = float(newrow[11].strip('%'))/100
+            yield newrow
 
 
-def process_varscan(conn,filename):
+def varscan_add_strain(conn,filename):
     c = conn.cursor()
-    read_info_sql = "INSERT INTO varscan (child, chromosome, position, refernce, variant, normal_reads1, normal_reads2,"\
+    if filename[-8:]!='filtered':
+        print filename, 'is not a filtered varscan output. All files should end in .filtered'
+        return
+    read_info_sql = "INSERT INTO varscan (child, chromosome, position, reference, variant, normal_reads1, normal_reads2,"\
                     " normal_var_freq, normal_gt, tumor_reads1, tumor_reads2," \
-                    " tumor_reads2, tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
+                    " tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
                     "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
-                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus) "\
+                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus, variant_type) "\
                     "VALUES %s"
-    temp = "("+"%s," * 23 + "%s)"
-    execute_values(c, read_info_sql, varscan_generator(filename), template=temp)
+    temp = "("+"%s,"* 24 + "%s)"
+    execute_values(c, read_info_sql, varscan_generator(filename, 'snp'), template=temp)
+    c.close()
+    conn.commit()
+
+def indel_add_strain(conn,filename):
+    c = conn.cursor()
+    if filename[-5:]!='indel':
+        print filename, 'All files should end in .indel'
+        return
+    print 'Adding strain', filename
+    read_info_sql = "INSERT INTO varscan (child, chromosome, position, reference, variant, normal_reads1, normal_reads2,"\
+                    " normal_var_freq, normal_gt, tumor_reads1, tumor_reads2," \
+                    " tumor_var_freq, tumor_gt, somatic_status, variant_p_value, somatic_p_value, " \
+                    "tumor_reads1_plus, tumor_reads1_minus, tumor_reads2_plus, tumor_reads2_minus, normal_reads1_plus,"\
+                    " normal_reads1_minus, normal_reads2_plus, normal_reads2_minus, variant_type) "\
+                    "VALUES %s"
+    temp = "("+"%s,"* 24 + "%s)"
+    execute_values(c, read_info_sql, varscan_generator(filename,'indel'), template=temp)
+    c.close()
+    conn.commit()
+
 
 
 def main():
@@ -249,28 +281,33 @@ def main():
                                                                      'files are added. Otherwise the input is assumed '
                                                                      'to be one file.')
 
-    varscan_parser = subparsers.add_parser('vcf',
-                                       help='Adds both snps and indels from varscan. The files show share the same prefix'
-                                            'the snp file should end with .snp and the indel file with .indel')
+    varscan_parser = subparsers.add_parser('varscan',
+                                       help='Adds snps from varscan. The file must end in .filtered')
     varscan_parser.add_argument('name', help='The name of the file or directory you want to process')
     varscan_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
                                                                      'treated as a directory and all .allelecount'
                                                                      'files are added. Otherwise the input is assumed '
                                                                      'to be one file.')
-    varscan_parser.set_defaults(func=vcf_add_strain)
+    varscan_parser.set_defaults(func=varscan_add_strain)
 
+    indel_parser = subparsers.add_parser('indel',
+                                       help='Adds varscan indels to db. File should end in .indel')
+    indel_parser.add_argument('name', help='The name of the file or directory you want to process')
+    indel_parser.add_argument('--directory', action='store_true', help='If this flag is present the input will be '
+                                                                     'treated as a directory and all .allelecount'
+                                                                     'files are added. Otherwise the input is assumed '
+                                                                     'to be one file.')
+    indel_parser.set_defaults(func=indel_add_strain)
+    
     gff_parser = subparsers.add_parser('gff', help="Adds gff data to DB")
     gff_parser.add_argument('name', help='The path of the gff file')
     gff_parser.set_defaults(func=process_gff)
-
     args = parser.parse_args()
     try:
         conn = psycopg2.connect(
             "dbname='postgres' host='"+config.host+"' user='" + config.username + "' password='" + config.password + "'")
     except psycopg2.OperationalError:
         print "Unable to connect to the database"
-
-
     if args.func == process_gff:
         infile = args.name
         args.func(conn, infile)
