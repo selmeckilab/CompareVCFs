@@ -493,6 +493,9 @@ def main():
 
     :return:
     """
+    # TODO Change terminology to tumor/normal
+
+
     parser = argparse.ArgumentParser(
         description="Compare one parent vcf to one or more child vcfs. All files should be bgzipped and tabix indexed.")
     parser.add_argument("infiles", nargs="+", help='''The locations of all files to be compared.
