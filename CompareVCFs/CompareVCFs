@@ -58,7 +58,7 @@ class Genes(object):
         self._gene_dict = gd
 
 
-class Child(object):
+class Tumor(object):
     def __init__(self, name, al, gt, gt_data, dp, mq, mq0, ref, effect):
         """
 
@@ -107,15 +107,15 @@ class Row(object):
 
     features = None
     file_names = []
-    parent_name = None
+    normal_name = None
 
-    def __init__(self, chrom, pos, parent, children):
+    def __init__(self, chrom, pos, normal, tumors):
 
         self.chrom = chrom
         self.pos = pos
-        self.parent = parent
-        self.children = children
-        self.compare_children()
+        self.normal = normal
+        self.tumors = tumors
+        self.compare_tumors()
 
     @staticmethod
     def extract_name(file_name):
@@ -140,20 +140,21 @@ class Row(object):
             gene = feature.pop()[2]
         return gene
 
-    def compare_children(self):
+    def compare_tumors(self):
         """
         determines the each child's mutation type and adds it to the child instance
         :return:
         """
-        for child in self.children:
+
+        for tumor in self.tumors:
             mut = ''
-            if self.parent.gt == 1 and child.gt == 0:
+            if self.normal.gt == 1 and tumor.gt == 0:
                 mut = 'loh'
-            elif self.parent.gt != 1 and child.gt == 1:
+            elif self.noraml.gt != 1 and tumor.gt == 1:
                 mut = 'heterozygous'
-            elif self.parent.al != child.al:
+            elif self.normal.al != tumor.al:
                 mut = 'homozygous'
-            child.mutation = mut
+            tumor.mutation = mut
 
 
 class VCFWriter:
@@ -218,11 +219,8 @@ class VCFWriter:
                 else:
                     ref = row.parent.al
 
-                new_rec=vcf.model._Record(row.chrom, row.pos, ref, "", alt, "", "PASS",
-                                         "", "", None)
-
+                new_rec=vcf.model._Record(row.chrom, row.pos, ref, "", alt, "", "PASS", "", "", None)
                 call = vcf.model._Call(new_rec, child.name, child.gt_data)
-
                 new_rec.samples = [call]
                 new_recs.append(new_rec)
         return new_recs
@@ -239,7 +237,8 @@ class CSVWriter():
             self.outfile = open(outfile, "w")
 
         self.csv_writer = csv.writer(self.outfile)
-        self.csv_writer.writerow(["Progeny", "Chromosome", "Position", "ParentAlleles", "ChildAlleles", "Gene","Mutation","ParentDepth","ChildDepth"])
+        self.csv_writer.writerow(["Progeny", "Chromosome", "Position", "ParentAlleles", "ChildAlleles", "Gene",
+                                  "Variant", "ParentDepth","ChildDepth"])
 
     def __enter__(self):
         return self
@@ -313,13 +312,13 @@ class Comparator():
 
     @abstractmethod
     def next(self):
-
         pass
 
+
     def __next__(self):
-        return self.next()
         if self.rows_processed % 100000 == 0:
-            print "Processed " + str(self.processed_rows) + " rows." 
+            print "Processed " + str(self.processed_rows) + " rows."
+        return self.next()
 
     def get_location(self, reader):
         """
@@ -360,7 +359,7 @@ class MultiSampleComparator(Comparator):
 
         :return: a MultiSampleRow()
         """
-        rec=next(self.readers[0])
+        rec = next(self.readers[0])
         return Row(rec)
 
 
@@ -385,37 +384,33 @@ class MultiFileComparator(Comparator):
                 chrom = recs[0].CHROM
                 pos = recs[0].POS
                 parent = self.make_child(0,recs[0])
-                children = self.make_children(recs)
+                tumors = self.make_tumors(recs)
 
-                row = Row(chrom, pos, parent, children)
+                row = Row(chrom, pos, parent, tumors)
                 return row
 
-    def make_children(self,recs):
-        children = []
-        for idx,rec in enumerate(recs[1:]):
+    def make_tumors(self,recs):
+        tumors = []
+        for idx, rec in enumerate(recs[1:]):
             if self.filter_rec(rec):
-                children.append(self.make_child(idx+1, rec))
-        return children
+                tumors.append(self.make_child(idx+1, rec))
+        return tumors
     
     @staticmethod
     def filter_rec(rec):
         if not rec:
             return False
-        if len(rec.ALT)>1:
+        if len(rec.ALT) > 1:
+            # filters out deletions
             return False
-        if len(rec.REF)>1:
+        if len(rec.REF) > 1:
+            # filters out insertions
             return False
         if rec.FILTER:
             return False
-	if "DP" not in rec.INFO:
-            return False
-        if rec.INFO["DP"] < 15:
-            return False
-        if "HaplotypeScore" in rec.INFO and rec.INFO["HaplotypeScore"]>13:
-            return False
         return True
 
-    def make_child(self, idx, rec):
+    def make_tumor(self, idx, rec):
         name = self.extract_name(self.infiles[idx])
         ref = rec.REF
         try:
@@ -436,7 +431,7 @@ class MultiFileComparator(Comparator):
             gt = 0
             gt_data = None
             effect = 0
-        return Child(name, al, gt, gt_data, dp, mq, mq0, ref, effect)
+        return Tumor(name, al, gt, gt_data, dp, mq, mq0, ref, effect)
 
     @staticmethod
     def get_effect(rec):
@@ -452,27 +447,20 @@ class MultiFileComparator(Comparator):
         return effects
 
 
-    # TODO Change terminology to tumor/normal
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Compare one parent vcf to one or more child vcfs. All files should be bgzipped and tabix indexed.")
     parser.add_argument("infiles", nargs="+", help='''The locations of all files to be compared.
                         If only one file is given, the file is assumed to be a multisample vcf.
-                        In this case, specify the call name of the parent. If there are multiple files,
+                        In this case, specify the call name of the normal. If there are multiple files,
                         the parent is assumed to be the first, unless a different file name is given by the parent
                         option.''')
-    parser.add_argument("--parent", help="The call name or filename of the parent")
-    parser.add_argument("--pedigree", help=(
-        "The relationship between parents and children can also be specified with a\n"
-        "     json file of the form:\n"
-        "    {parent:/file/path/to/parent.vcf,children:[file/path/to/first/child.vcf,file/path/to/second/child.vcf]}"))
+    parser.add_argument("--normal", help="The call name or filename of the parent")
     parser.add_argument("--location", nargs=3,
                         help='''The chromesome, start position and end position that you would like to pull out. For
                         example: 5 44567 44789. If you specify this option the file must be tabix indexed.''')
     parser.add_argument("--gff", default="", help='''Path of GFF for features''')
-    parser.add_argument("--csv", action='store_true', help='''If you want a vcf output, otherwise will be a csv''')
+    parser.add_argument("--vcf", action='store_true', help='''If you want a vcf output, otherwise will be a csv''')
     parser.add_argument("--outfile",
                         help='''Name of the outfile. By default the outfile is the name of the parent followed by the
                         extension''')
